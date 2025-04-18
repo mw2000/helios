@@ -54,6 +54,7 @@ impl ConsensusClient {
             latest_block: None,
             block_send,
             finalized_block_send,
+            current_rpc_index: 0,
         };
 
         if config.verify_unsafe_signer {
@@ -114,15 +115,19 @@ struct Inner {
     latest_block: Option<u64>,
     block_send: Sender<Block<Transaction>>,
     finalized_block_send: watch::Sender<Option<Block<Transaction>>>,
+    current_rpc_index: usize,
 }
 
 impl Inner {
     pub async fn advance(&mut self) -> Result<()> {
         let req = format!("{}latest", self.server_url);
-        let commitment = reqwest::get(req)
-            .await?
-            .json::<SequencerCommitment>()
-            .await?;
+        let commitment = match reqwest::get(&req).await {
+            Ok(response) => response.json::<SequencerCommitment>().await?,
+            Err(e) => {
+                error!(target: "helios::opstack", "failed to fetch from RPC: {}", e);
+                return Ok(());
+            }
+        };
 
         let curr_signer = *self
             .unsafe_signer
@@ -181,9 +186,8 @@ fn verify_unsafe_signer(config: Config, signer: Arc<Mutex<Address>>) {
             let mut eth_consensus =
                 EthConsensusClient::<MainnetConsensusSpec, HttpRpc, ConfigDB>::new(
                     &eth_config
-                        .consensus_rpc
-                        .clone()
-                        .ok_or_else(|| eyre!("missing consensus rpc"))?,
+                        .consensus_rpcs
+                        .clone(),
                     Arc::new(eth_config.into()),
                 )?;
 

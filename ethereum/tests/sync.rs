@@ -9,7 +9,7 @@ use helios_ethereum::{consensus::ConsensusClient, database::ConfigDB, rpc::mock_
 async fn setup() -> ConsensusClient<MainnetConsensusSpec, MockRpc, ConfigDB> {
     let base_config = networks::mainnet();
     let config = Config {
-        consensus_rpc: String::new(),
+        consensus_rpcs: vec!["testdata/".to_string()],
         chain: base_config.chain,
         forks: base_config.forks,
         max_checkpoint_age: 123123123,
@@ -19,7 +19,7 @@ async fn setup() -> ConsensusClient<MainnetConsensusSpec, MockRpc, ConfigDB> {
         ..Default::default()
     };
 
-    ConsensusClient::new("testdata/", Arc::new(config)).unwrap()
+    ConsensusClient::new(&["testdata/".to_string()], Arc::new(config)).unwrap()
 }
 
 #[tokio::test]

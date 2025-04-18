@@ -14,7 +14,7 @@ use crate::types::LineaClient;
 #[derive(Default)]
 pub struct LineaClientBuilder {
     network: Option<Network>,
-    execution_rpc: Option<String>,
+    execution_rpcs: Vec<String>,
     #[cfg(not(target_arch = "wasm32"))]
     rpc_bind_ip: Option<IpAddr>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -33,8 +33,8 @@ impl LineaClientBuilder {
         self
     }
 
-    pub fn execution_rpc(mut self, execution_rpc: &str) -> Self {
-        self.execution_rpc = Some(execution_rpc.to_string());
+    pub fn execution_rpcs(mut self, execution_rpcs: Vec<String>) -> Self {
+        self.execution_rpcs = execution_rpcs;
         self
     }
 
@@ -66,13 +66,7 @@ impl LineaClientBuilder {
             config.to_base_config()
         };
 
-        let execution_rpc = self.execution_rpc.unwrap_or_else(|| {
-            self.config
-                .as_ref()
-                .expect("missing execution rpc")
-                .execution_rpc
-                .clone()
-        });
+        let execution_rpcs = self.execution_rpcs.clone();
 
         #[cfg(not(target_arch = "wasm32"))]
         let rpc_bind_ip = if self.rpc_bind_ip.is_some() {
@@ -93,7 +87,7 @@ impl LineaClientBuilder {
         };
 
         let config = Config {
-            execution_rpc,
+            execution_rpcs,
             #[cfg(not(target_arch = "wasm32"))]
             rpc_bind_ip,
             #[cfg(target_arch = "wasm32")]
@@ -115,7 +109,7 @@ impl LineaClientBuilder {
         let config = Arc::new(config);
         let consensus = ConsensusClient::new(&config);
 
-        let execution_mode = ExecutionMode::from_urls(Some(config.execution_rpc.clone()), None);
+        let execution_mode = ExecutionMode::from_urls(Some(config.execution_rpcs.clone()), None);
 
         let fork_schedule = ForkSchedule {
             prague_timestamp: u64::MAX,

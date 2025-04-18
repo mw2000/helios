@@ -79,7 +79,7 @@ pub fn mainnet() -> BaseConfig {
             "2f5319c3db189044de938be99a76d12205290b1bfbb280ef7b0f60a40fbf81b8"
         ),
         rpc_port: 8545,
-        consensus_rpc: Some("https://ethereum.operationsolarstorm.org".to_string()),
+        consensus_rpcs: vec!["https://ethereum.operationsolarstorm.org".to_string()],
         chain: ChainConfig {
             chain_id: 1,
             genesis_time: 1606824023,
@@ -127,7 +127,7 @@ pub fn sepolia() -> BaseConfig {
             "d2450a31dbdec0be8bc09f2eeddc4b58fc77ed2df9158aa16cb1f6b63b90be3e"
         ),
         rpc_port: 8545,
-        consensus_rpc: None,
+        consensus_rpcs: vec![],
         chain: ChainConfig {
             chain_id: 11155111,
             genesis_time: 1655733600,
@@ -175,7 +175,7 @@ pub fn holesky() -> BaseConfig {
             "8d7bf5aa9a46ef46ce2cec02e56c8a203d8157211d3599d61196972cf6def229"
         ),
         rpc_port: 8545,
-        consensus_rpc: None,
+        consensus_rpcs: vec![],
         chain: ChainConfig {
             chain_id: 17000,
             genesis_time: 1695902400,
@@ -223,7 +223,7 @@ pub fn pectra_devnet() -> BaseConfig {
             "f52e8522f1abc34fa91f4a0c6560cce6f9d557cfec083f1bc325a74c6060df84"
         ),
         rpc_port: 8545,
-        consensus_rpc: None,
+        consensus_rpcs: vec![],
         chain: ChainConfig {
             chain_id: 7072151312,
             genesis_time: 1738603860,

@@ -16,7 +16,7 @@ pub struct OpStackClientBuilder {
     config: Option<Config>,
     network: Option<Network>,
     consensus_rpc: Option<Url>,
-    execution_rpc: Option<String>,
+    execution_rpcs: Vec<String>,
     execution_verifiable_api: Option<String>,
     rpc_socket: Option<SocketAddr>,
     verify_unsafe_signer: Option<bool>,
@@ -37,8 +37,8 @@ impl OpStackClientBuilder {
         self
     }
 
-    pub fn execution_rpc(mut self, execution_rpc: &str) -> Self {
-        self.execution_rpc = Some(execution_rpc.to_string());
+    pub fn execution_rpcs(mut self, execution_rpcs: Vec<String>) -> Self {
+        self.execution_rpcs = execution_rpcs;
         self
     }
 
@@ -76,7 +76,7 @@ impl OpStackClientBuilder {
 
             Config {
                 consensus_rpc,
-                execution_rpc: self.execution_rpc,
+                execution_rpcs: self.execution_rpcs,
                 execution_verifiable_api: self.execution_verifiable_api,
                 rpc_socket: self.rpc_socket,
                 chain: NetworkConfig::from(network).chain,
@@ -87,8 +87,8 @@ impl OpStackClientBuilder {
         };
 
         let execution_mode = ExecutionMode::from_urls(
-            config.execution_rpc.clone(),
-            config.execution_verifiable_api.clone(),
+            Some(config.execution_rpcs.clone()),
+            config.execution_verifiable_api.clone().map(|s| Url::parse(&s).unwrap()),
         );
         let consensus = ConsensusClient::new(&config);
         let fork_schedule = ForkSchedule {

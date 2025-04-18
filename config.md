@@ -6,10 +6,10 @@ All configuration options can be set on a per-network level in `~/.helios/helios
 
 ```toml
 [mainnet]
-# The consensus rpc to use. This should be a trusted rpc endpoint. Defaults to "https://www.lightclientdata.org".
-consensus_rpc = "https://www.lightclientdata.org"
-# [REQUIRED] The execution rpc to use. This should be a trusted rpc endpoint.
-execution_rpc = "https://eth-mainnet.g.alchemy.com/v2/XXXXX"
+# The consensus rpcs to use. These should be trusted rpc endpoints. Defaults to ["https://www.lightclientdata.org"].
+consensus_rpcs = ["https://www.lightclientdata.org", "https://beacon-api.ethpandaops.io"]
+# [REQUIRED] The execution rpcs to use. These should be trusted rpc endpoints.
+execution_rpcs = ["https://eth-mainnet.g.alchemy.com/v2/XXXXX", "https://mainnet.infura.io/v3/XXXXX"]
 # The port to run the JSON-RPC server on. By default, Helios will use port 8545.
 rpc_port = 8545
 # The ip that binds to the JSON-RPC server. By default, Helios will use 127.0.0.1. Use 0.0.0.0 to allow access from remote.
@@ -30,10 +30,10 @@ fallback = "https://sync-mainnet.beaconcha.in"
 load_external_fallback = true
 
 [goerli]
-# The consensus rpc to use. This should be a trusted rpc endpoint. Defaults to Nimbus testnet.
-consensus_rpc = "http://testing.prater.beacon-api.nimbus.team"
-# [REQUIRED] The execution rpc to use. This should be a trusted rpc endpoint.
-execution_rpc = "https://eth-goerli.g.alchemy.com/v2/XXXXX"
+# The consensus rpcs to use. These should be trusted rpc endpoints. Defaults to Nimbus testnet.
+consensus_rpcs = ["http://testing.prater.beacon-api.nimbus.team", "https://goerli.beacon-api.ethpandaops.io"]
+# [REQUIRED] The execution rpcs to use. These should be trusted rpc endpoints.
+execution_rpcs = ["https://eth-goerli.g.alchemy.com/v2/XXXXX", "https://goerli.infura.io/v3/XXXXX"]
 # The port to run the JSON-RPC server on. By default, Helios will use port 8545.
 rpc_port = 8545
 # The ip that binds to the JSON-RPC server. By default, Helios will use 127.0.0.1. Use 0.0.0.0 to allow access from remote.
@@ -60,9 +60,9 @@ load_external_fallback = true
 All configuration options below are available on a per-network level, where network is specified by a header (eg `[mainnet]` or `[goerli]`). Many of these options can be configured through cli flags as well. See [README.md](./README.md#additional-options) or run `helios --help` for more information.
 
 
-- `consensus_rpc` - The URL of the consensus RPC endpoint used to fetch the latest beacon chain head and sync status. This must be a consensus node that supports the light client beaconchain api. We recommend using Nimbus for this. If no consensus rpc is supplied, it defaults to `https://www.lightclientdata.org` which is run by us.
+- `consensus_rpcs` - A list of URLs of consensus RPC endpoints used to fetch the latest beacon chain head and sync status. These must be consensus nodes that support the light client beaconchain api. We recommend using Nimbus for this. If no consensus rpcs are supplied, it defaults to `["https://www.lightclientdata.org"]` which is run by us. Helios will automatically failover to the next RPC if one fails.
 
-- `execution_rpc` - The URL of the execution RPC endpoint used to fetch the latest execution chain head and sync status. This must be an execution node that supports the light client execution api. We recommend using Geth for this.
+- `execution_rpcs` - A list of URLs of execution RPC endpoints used to fetch the latest execution chain head and sync status. These must be execution nodes that support the light client execution api. We recommend using Geth for this. Helios will automatically failover to the next RPC if one fails.
 
 - `rpc_port` - The port to run the JSON-RPC server on. By default, Helios will use port 8545.
 

@@ -10,3 +10,4 @@ serde_json.workspace = true
 revm.workspace = true
 eyre.workspace = true
 tokio.workspace = true
+url = "2.4"

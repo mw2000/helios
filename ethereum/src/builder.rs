@@ -3,6 +3,7 @@ use std::net::{IpAddr, SocketAddr};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::sync::Arc;
+use url::Url;
 
 use alloy::primitives::B256;
 use eyre::{eyre, Result};
@@ -22,8 +23,8 @@ use crate::EthereumClient;
 #[derive(Default)]
 pub struct EthereumClientBuilder {
     network: Option<Network>,
-    consensus_rpc: Option<String>,
-    execution_rpc: Option<String>,
+    consensus_rpcs: Vec<String>,
+    execution_rpcs: Vec<String>,
     execution_verifiable_api: Option<String>,
     checkpoint: Option<B256>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -48,13 +49,13 @@ impl EthereumClientBuilder {
         self
     }
 
-    pub fn consensus_rpc(mut self, consensus_rpc: &str) -> Self {
-        self.consensus_rpc = Some(consensus_rpc.to_string());
+    pub fn consensus_rpcs(mut self, consensus_rpcs: Vec<String>) -> Self {
+        self.consensus_rpcs = consensus_rpcs;
         self
     }
 
-    pub fn execution_rpc(mut self, execution_rpc: &str) -> Self {
-        self.execution_rpc = Some(execution_rpc.to_string());
+    pub fn execution_rpcs(mut self, execution_rpcs: Vec<String>) -> Self {
+        self.execution_rpcs = execution_rpcs;
         self
     }
 
@@ -117,17 +118,24 @@ impl EthereumClientBuilder {
             config.to_base_config()
         };
 
-        let consensus_rpc = self.consensus_rpc.unwrap_or_else(|| {
+        let consensus_rpcs = if !self.consensus_rpcs.is_empty() {
+            self.consensus_rpcs
+        } else {
             self.config
                 .as_ref()
-                .expect("missing consensus rpc")
-                .consensus_rpc
+                .expect("missing consensus rpcs")
+                .consensus_rpcs
                 .clone()
-        });
+        };
 
-        let execution_rpc = self
-            .execution_rpc
-            .or_else(|| self.config.as_ref().and_then(|c| c.execution_rpc.clone()));
+        let execution_rpcs = if !self.execution_rpcs.is_empty() {
+            self.execution_rpcs
+        } else {
+            self.config
+                .as_ref()
+                .map(|c| c.execution_rpcs.clone())
+                .unwrap_or_default()
+        };
 
         let execution_verifiable_api = self.execution_verifiable_api.or_else(|| {
             self.config
@@ -197,8 +205,8 @@ impl EthereumClientBuilder {
         };
 
         let config = Config {
-            consensus_rpc,
-            execution_rpc,
+            consensus_rpcs,
+            execution_rpcs,
             execution_verifiable_api,
             checkpoint,
             default_checkpoint,
@@ -232,11 +240,11 @@ impl EthereumClientBuilder {
         };
 
         let execution_mode = ExecutionMode::from_urls(
-            config.execution_rpc.clone(),
-            config.execution_verifiable_api.clone(),
+            Some(config.execution_rpcs.clone()),
+            config.execution_verifiable_api.clone().map(|s| Url::parse(&s).unwrap()),
         );
         let config = Arc::new(config);
-        let consensus = ConsensusClient::new(&config.consensus_rpc, config.clone())?;
+        let consensus = ConsensusClient::new(&config.consensus_rpcs, config.clone())?;
 
         Client::<Ethereum, ConsensusClient<MainnetConsensusSpec, HttpRpc, DB>>::new(
             execution_mode,

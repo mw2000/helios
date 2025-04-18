@@ -86,14 +86,18 @@ impl<S: ConsensusSpec, R: ConsensusRpc<S>, DB: Database> Consensus<Block>
 }
 
 impl<S: ConsensusSpec, R: ConsensusRpc<S>, DB: Database> ConsensusClient<S, R, DB> {
-    pub fn new(rpc: &str, config: Arc<Config>) -> Result<ConsensusClient<S, R, DB>> {
+    pub fn new(rpcs: &[String], config: Arc<Config>) -> Result<ConsensusClient<S, R, DB>> {
+        if rpcs.is_empty() {
+            return Err(eyre!("no consensus RPCs provided"));
+        }
+
         let (block_send, block_recv) = channel(256);
         let (finalized_block_send, finalized_block_recv) = watch::channel(None);
         let (checkpoint_send, checkpoint_recv) = watch::channel(None);
         let (shutdown_send, shutdown_recv) = watch::channel(false);
 
         let config_clone = config.clone();
-        let rpc = rpc.to_string();
+        let rpcs = rpcs.to_vec();
         let genesis_time = config.chain.genesis_time;
         let db = Arc::new(DB::new(&config)?);
         let initial_checkpoint = config
@@ -106,73 +110,43 @@ impl<S: ConsensusSpec, R: ConsensusRpc<S>, DB: Database> ConsensusClient<S, R, D
         #[cfg(target_arch = "wasm32")]
         let run = wasm_bindgen_futures::spawn_local;
 
-        let mut shutdown_rx = shutdown_recv.clone();
+        let db_clone = db.clone();
+        let shutdown_recv_clone = shutdown_recv.clone();
+        let shutdown_rx = shutdown_recv.clone();
+        let mut current_rpc_index = 0;
+        let rpc = rpcs[current_rpc_index].clone();
 
         run(async move {
-            let mut inner = Inner::<S, R>::new(
-                &rpc,
-                block_send,
-                finalized_block_send,
-                checkpoint_send,
-                config.clone(),
-            );
-
-            let res = inner.sync(initial_checkpoint).await;
-            if let Err(err) = res {
-                if config.load_external_fallback {
-                    let res = sync_all_fallbacks(&mut inner, config.chain.chain_id).await;
-                    if let Err(err) = res {
-                        error!(target: "helios::consensus", err = %err, "sync failed");
-                        process::exit(1);
-                    }
-                } else if let Some(fallback) = &config.fallback {
-                    let res = sync_fallback(&mut inner, fallback).await;
-                    if let Err(err) = res {
-                        error!(target: "helios::consensus", err = %err, "sync failed");
-                        process::exit(1);
-                    }
-                } else {
-                    error!(target: "helios::consensus", err = %err, "sync failed");
-                    process::exit(1);
-                }
-            }
-
-            _ = inner.send_blocks().await;
-
-            let start = Instant::now() + inner.duration_until_next_update().to_std().unwrap();
-            let mut interval = interval_at(start, std::time::Duration::from_secs(12));
-
             loop {
-                tokio::select! {
-                    _ = shutdown_rx.changed() => {
-                        if *shutdown_rx.borrow() {
-                            info!(target: "helios::consensus", "shutting down consensus client");
-                            break;
-                        }
-                    }
-                    _ = interval.tick() => {
-                        let res = inner.advance().await;
-                        if let Err(err) = res {
-                            warn!(target: "helios::consensus", "advance error: {}", err);
-                            continue;
-                        }
+                if *shutdown_rx.borrow() {
+                    break;
+                }
 
-                        let res = inner.send_blocks().await;
-                        if let Err(err) = res {
-                            warn!(target: "helios::consensus", "send error: {}", err);
-                            continue;
+                match Self::run_consensus_loop(
+                    &rpc,
+                    &config_clone,
+                    &db_clone,
+                    block_send.clone(),
+                    finalized_block_send.clone(),
+                    checkpoint_send.clone(),
+                    &shutdown_recv_clone,
+                )
+                .await
+                {
+                    Ok(_) => break,
+                    Err(e) => {
+                        error!(target: "helios::consensus", error = %e, "consensus loop failed, trying next RPC");
+                        current_rpc_index = (current_rpc_index + 1) % rpcs.len();
+                        if current_rpc_index == 0 {
+                            error!(target: "helios::consensus", "all RPCs failed, retrying in 5 seconds");
+                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                         }
                     }
                 }
             }
         });
 
-        save_new_checkpoints(
-            checkpoint_recv.clone(),
-            db.clone(),
-            initial_checkpoint,
-            shutdown_recv,
-        );
+        save_new_checkpoints(checkpoint_recv.clone(), db, initial_checkpoint, shutdown_recv);
 
         Ok(ConsensusClient {
             block_recv: Some(block_recv),
@@ -180,9 +154,81 @@ impl<S: ConsensusSpec, R: ConsensusRpc<S>, DB: Database> ConsensusClient<S, R, D
             checkpoint_recv,
             shutdown_send,
             genesis_time,
-            config: config_clone,
+            config,
             phantom: PhantomData,
         })
+    }
+
+    async fn run_consensus_loop(
+        rpc: &str,
+        config: &Arc<Config>,
+        db: &Arc<DB>,
+        block_send: Sender<Block<Transaction>>,
+        finalized_block_send: watch::Sender<Option<Block<Transaction>>>,
+        checkpoint_send: watch::Sender<Option<B256>>,
+        shutdown_recv: &watch::Receiver<bool>,
+    ) -> Result<()> {
+        let mut inner = Inner::<S, R>::new(
+            rpc,
+            block_send,
+            finalized_block_send,
+            checkpoint_send,
+            config.clone(),
+        );
+
+        let initial_checkpoint = config
+            .checkpoint
+            .unwrap_or_else(|| db.load_checkpoint().unwrap_or(config.default_checkpoint));
+
+        let res = inner.sync(initial_checkpoint).await;
+        if let Err(err) = res {
+            if config.load_external_fallback {
+                let res = sync_all_fallbacks(&mut inner, config.chain.chain_id).await;
+                if let Err(err) = res {
+                    error!(target: "helios::consensus", err = %err, "sync failed");
+                    process::exit(1);
+                }
+            } else if let Some(fallback) = &config.fallback {
+                let res = sync_fallback(&mut inner, fallback).await;
+                if let Err(err) = res {
+                    error!(target: "helios::consensus", err = %err, "sync failed");
+                    process::exit(1);
+                }
+            } else {
+                error!(target: "helios::consensus", err = %err, "sync failed");
+                process::exit(1);
+            }
+        }
+
+        _ = inner.send_blocks().await;
+
+        let start = Instant::now() + inner.duration_until_next_update().to_std().unwrap();
+        let mut interval = interval_at(start, std::time::Duration::from_secs(12));
+        let mut shutdown_rx = shutdown_recv.clone();
+
+        loop {
+            tokio::select! {
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        info!(target: "helios::consensus", "shutting down consensus client");
+                        return Ok(());
+                    }
+                }
+                _ = interval.tick() => {
+                    let res = inner.advance().await;
+                    if let Err(err) = res {
+                        warn!(target: "helios::consensus", "advance error: {}", err);
+                        continue;
+                    }
+
+                    let res = inner.send_blocks().await;
+                    if let Err(err) = res {
+                        warn!(target: "helios::consensus", "send error: {}", err);
+                        continue;
+                    }
+                }
+            }
+        }
     }
 
     pub fn expected_current_slot(&self) -> u64 {
@@ -703,7 +749,8 @@ mod tests {
     ) -> Inner<MainnetConsensusSpec, MockRpc> {
         let base_config = networks::mainnet();
         let config = Config {
-            consensus_rpc: String::new(),
+            consensus_rpcs: vec![],
+            execution_rpcs: vec![],
             chain: base_config.chain,
             forks: base_config.forks,
             strict_checkpoint_age,

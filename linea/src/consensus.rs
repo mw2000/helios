@@ -38,12 +38,13 @@ impl ConsensusClient {
         let (finalized_block_send, finalized_block_recv) = watch::channel(None);
 
         let mut inner = Inner {
-            server_url: config.execution_rpc.to_string(),
+            server_url: config.execution_rpcs.clone(),
             unsafe_signer: Arc::new(Mutex::new(config.chain.unsafe_signer)),
             chain_id: config.chain.chain_id,
             latest_block: None,
             block_send,
             finalized_block_send,
+            current_rpc_index: 0,
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -94,23 +95,43 @@ impl Consensus<Block<Transaction>> for ConsensusClient {
 
 #[allow(dead_code)]
 struct Inner {
-    server_url: String,
+    server_url: Vec<String>,
     unsafe_signer: Arc<Mutex<Address>>,
     chain_id: u64,
     latest_block: Option<u64>,
     block_send: Sender<Block<Transaction>>,
     finalized_block_send: watch::Sender<Option<Block<Transaction>>>,
+    current_rpc_index: usize,
 }
 
 impl Inner {
     pub async fn advance(&mut self) -> Result<()> {
-        let rpc_url = Url::parse(self.server_url.as_str())?;
+        let rpc_url = match Url::parse(&self.server_url[self.current_rpc_index]) {
+            Ok(url) => url,
+            Err(e) => {
+                error!(target: "helios::linea", "invalid RPC URL: {}", e);
+                return Ok(());
+            }
+        };
+
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
-        let block = provider
+        let block = match provider
             .get_block_by_number(BlockNumberOrTag::Latest, BlockTransactionsKind::Full)
-            .await?
-            .unwrap();
+            .await
+        {
+            Ok(Some(block)) => block,
+            Ok(None) => {
+                error!(target: "helios::linea", "no block found");
+                return Ok(());
+            }
+            Err(e) => {
+                error!(target: "helios::linea", "failed to fetch block: {}", e);
+                // Try next RPC if available
+                self.current_rpc_index = (self.current_rpc_index + 1) % self.server_url.len();
+                return Ok(());
+            }
+        };
 
         let curr_signer = *self
             .unsafe_signer

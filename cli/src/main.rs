@@ -139,12 +139,12 @@ struct EthereumArgs {
     rpc_port: Option<u16>,
     #[arg(short = 'w', long, env)]
     checkpoint: Option<B256>,
-    #[arg(short, long, env, value_parser = parse_url)]
-    execution_rpc: Option<Url>,
+    #[arg(short, long, env, value_parser = parse_url, value_delimiter = ',')]
+    execution_rpcs: Vec<Url>,
     #[arg(long, env, value_parser = parse_url)]
     execution_verifiable_api: Option<Url>,
-    #[arg(short, long, env, value_parser = parse_url)]
-    consensus_rpc: Option<Url>,
+    #[arg(short, long, env, value_parser = parse_url, value_delimiter = ',')]
+    consensus_rpcs: Vec<Url>,
     #[arg(short, long, env)]
     data_dir: Option<String>,
     #[arg(short = 'f', long, env)]
@@ -176,9 +176,9 @@ impl EthereumArgs {
     fn as_cli_config(&self) -> CliConfig {
         CliConfig {
             checkpoint: self.checkpoint,
-            execution_rpc: self.execution_rpc.clone(),
+            execution_rpcs: self.execution_rpcs.clone(),
             execution_verifiable_api: self.execution_verifiable_api.clone(),
-            consensus_rpc: self.consensus_rpc.clone(),
+            consensus_rpcs: self.consensus_rpcs.clone(),
             data_dir: self
                 .data_dir
                 .as_ref()

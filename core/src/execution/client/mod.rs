@@ -36,15 +36,16 @@ impl<N: NetworkSpec, R: ExecutionRpc<N>, A: VerifiableApi<N>> ExecutionInnerClie
         state: State<N>,
     ) -> Result<Arc<dyn ExecutionInner<N>>> {
         let this = match execution_mode {
-            ExecutionMode::VerifiableApi(api_url) => {
+            ExecutionMode::Verifiable(_, api_url) => {
                 info!(target: "helios::execution", "using Verifiable-API url={}", api_url);
                 Self::Api(verifiable_api::ExecutionInnerVerifiableApiClient::new(
-                    &api_url, state,
+                    &api_url.to_string(), state,
                 )?)
             }
-            ExecutionMode::Rpc(rpc_url) => {
+            ExecutionMode::Full(rpcs) => {
+                let rpc_url = rpcs.first().ok_or_else(|| eyre::eyre!("no execution RPCs provided"))?;
                 info!(target: "helios::execution", "Using JSON-RPC url={}", rpc_url);
-                Self::Rpc(rpc::ExecutionInnerRpcClient::new(&rpc_url, state)?)
+                Self::Rpc(rpc::ExecutionInnerRpcClient::new(rpc_url, state)?)
             }
         };
 

@@ -146,7 +146,7 @@ impl Default for BaseConfig {
 
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct Config {
-    pub execution_rpc: String,
+    pub execution_rpcs: Vec<String>,
     pub rpc_bind_ip: Option<IpAddr>,
     pub rpc_port: Option<u16>,
     pub chain: ChainConfig,
@@ -201,7 +201,7 @@ impl From<BaseConfig> for Config {
         Config {
             rpc_bind_ip: Some(base.rpc_bind_ip),
             rpc_port: Some(base.rpc_port),
-            execution_rpc: String::new(),
+            execution_rpcs: vec![],
             chain: base.chain,
         }
     }
